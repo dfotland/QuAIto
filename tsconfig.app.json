@@ -28,5 +28,6 @@
       "@smart-games/common-spa": ["./shared/common-spa/src/index.ts"]
     }
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts"]
 }

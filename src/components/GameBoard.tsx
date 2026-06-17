@@ -1,13 +1,12 @@
 import React from 'react';
-import Piece, { type PieceAttributes } from './Piece';
+import { BOARD_SIZE } from '../constants/game';
+import type { Board } from '../types/game';
+import Piece from './Piece';
 import './GameBoard.css';
-
-// Game Configuration Constants
-const BOARD_SIZE = 4; // 4x4 game board
 
 interface GameBoardProps {
   onCellClick?: (row: number, col: number) => void;
-  board?: (PieceAttributes | null)[][];
+  board?: Board;
   winningLine?: [number, number][] | null;
   gameOver?: boolean;
   lastMove?: [number, number] | null;

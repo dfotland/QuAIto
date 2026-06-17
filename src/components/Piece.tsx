@@ -1,12 +1,8 @@
 import React from 'react';
 import './Piece.css';
 
-export interface PieceAttributes {
-  height: 'tall' | 'short';
-  color: 'light' | 'dark';
-  shape: 'square' | 'round';
-  top: 'smooth' | 'split';
-}
+export type { PieceAttributes } from '../types/game';
+import type { PieceAttributes } from '../types/game';
 
 interface PieceProps {
   attributes: PieceAttributes;

@@ -14,11 +14,13 @@ Refactor QuAIto for maintainability and regression safety without changing game 
 
 ## Task Checklist
 
-- [ ] **foundation** — Add `src/types/game.ts` and `src/constants/game.ts`; migrate imports and add `createEmptyBoard`/`getOpponent` helpers in `gameUtils.ts`
-- [ ] **vitest** — Add Vitest config and tests for `gameUtils.ts` and `ai.ts` (deterministic cases with mocked `Math.random`)
-- [ ] **ai-logger** — Clean `ai.ts` (hoist `getMinSafePieces`, remove `AIOutput`, use constants) and add `utils/logger.ts`; gate App AI logs behind `enableAILogging`
+Work in this order — dead-code cleanup before hook extraction so dead state is not moved into new hooks:
+
+- [ ] **foundation** — Add `src/types/game.ts` and `src/constants/game.ts`; migrate imports; add `createEmptyBoard`/`getOpponent` helpers; deduplicate win-line scanning in `gameUtils.ts`
+- [ ] **vitest** — Add Vitest config (with path aliases) and tests for `gameUtils.ts` and `ai.ts` (deterministic cases with controlled randomness)
+- [ ] **ai-logger** — Clean `ai.ts` (hoist `getMinSafePieces`, remove `AIOutput`, use constants) and add `utils/logger.ts`; gate all App debug logs behind `enableAILogging`
 - [ ] **dead-code** — Remove `selectedPiece` state, `lastExecutionKeyRef`, duplicate `formatPieceForDisplay`; simplify `PieceSet`; remove unused `.mcts-config` CSS
-- [ ] **decompose-app** — Extract `useQuartoGame` and `useAIController` hooks plus modal components; slim `App.tsx` and fix `useCallback` deps via functional `setState`
+- [ ] **decompose-app** — Extract `useQuartoGame` and `useAIController` hooks plus modal components; slim `App.tsx`; fix `useCallback` deps (see hook contract below)
 - [ ] **verify** — Run `npm test`, `npm run build`, and manual smoke-test all game modes and modals
 
 ## Current Pain Points
@@ -53,7 +55,7 @@ Create two small modules and migrate imports (excluding MCTS files):
 **[`src/types/game.ts`](src/types/game.ts)** — canonical domain types:
 
 - `PieceAttributes` (moved from [`Piece.tsx`](src/components/Piece.tsx))
-- `Player`, `GamePhase`, `GameState`, `Board` (alias for `(PieceAttributes | null)[][]`)
+- `Player`, `GamePhase`, `GameState`, `AIDifficulty` (`'easy' | 'normal' | 'hard' | 'brutal'`), `Board` (alias for `(PieceAttributes | null)[][]`)
 - Re-export from `Piece.tsx` for backward-compatible imports if desired: `export type { PieceAttributes } from '../types/game'`
 
 **[`src/constants/game.ts`](src/constants/game.ts)** — single source:
@@ -65,9 +67,9 @@ Create two small modules and migrate imports (excluding MCTS files):
 - `createEmptyBoard()` — replaces repeated `Array(BOARD_SIZE).fill(null)...` in App
 - `getOpponent(player: Player): Player` — replaces 6 inline ternaries in App
 - Replace magic `4` loops with `BOARD_SIZE` from constants
-- Optionally deduplicate win-line scanning (extract `checkLine(pieces)` helper used by `checkWinCondition` and `getWinningLine`) — same outputs, less duplication
+- **Deduplicate win-line scanning** — extract `checkLine(pieces)` helper used by `checkWinCondition` and `getWinningLine`; same outputs, less duplication, simpler tests
 
-Update imports in: `App.tsx`, `GameBoard.tsx`, `ai.ts`, `gameUtils.ts`, all components.
+Update imports in: `App.tsx`, `GameBoard.tsx`, `ControlPanel.tsx`, `ai.ts`, `gameUtils.ts`, all components.
 
 ---
 
@@ -79,14 +81,38 @@ Add Vitest + minimal config (standard Vite project setup):
 npm install -D vitest
 ```
 
-Add `"test": "vitest"` script and [`vitest.config.ts`](vitest.config.ts) mirroring Vite aliases.
+Add `"test": "vitest"` script and [`vitest.config.ts`](vitest.config.ts) mirroring Vite resolve aliases — include the `@smart-games/common-spa` path from [`tsconfig.app.json`](tsconfig.app.json):
+
+```ts
+resolve: {
+  alias: {
+    '@smart-games/common-spa': path.resolve(__dirname, './shared/common-spa/src/index.ts'),
+  },
+},
+```
 
 **Test files to add:**
 
 | File | What to cover |
 |------|----------------|
-| [`src/utils/gameUtils.test.ts`](src/utils/gameUtils.test.ts) | `generateAllPieces` (16 unique), `arePiecesEqual`, `checkWinCondition` (row/col/diag wins, no false positives), `getWinningLine`, `isBoardFull`, `createEmptyBoard` |
-| [`src/ai.test.ts`](src/ai.test.ts) | Deterministic cases via mocked `Math.random`: winning placement taken, safe piece preferred over dangerous, winning placement returns `pieceToGive: null`. Use fixed boards/pieces, not UI. |
+| [`src/utils/gameUtils.test.ts`](src/utils/gameUtils.test.ts) | `generateAllPieces` (16 unique), `arePiecesEqual`, `checkWinCondition` (row/col/diag wins, no false positives), `getWinningLine` (coordinates match `checkWinCondition` for the same board), `isBoardFull`, `createEmptyBoard` |
+| [`src/ai.test.ts`](src/ai.test.ts) | Deterministic cases with controlled randomness (see below) |
+
+**AI test randomness strategy**
+
+`makeAIMove` calls `Math.random` in several places (win-check skip, random placement, random piece, `getRandomElement`). A single mock return value is not enough.
+
+Preferred approaches (pick one or combine):
+
+1. **Test lower-level exports** — call `makeAIPlacement` / `makeAIPieceSelection` (or export them for testing) with fixed boards and `enableLogging: false`, avoiding multi-call random paths where possible.
+2. **Sequential `Math.random` mocks** — `vi.spyOn(Math, 'random').mockReturnValueOnce(0).mockReturnValueOnce(0.99)...` in call order for integration-style `makeAIMove` tests.
+3. **Force deterministic paths** — use `brutal` difficulty (0% random, 0% win-check skip) plus boards constructed so only one legal move exists.
+
+**Required AI test cases:**
+
+- Winning placement is taken when available
+- Safe piece preferred over dangerous piece when giving
+- **Winning placement returns `pieceToGive: null`** (game ends; no piece given after a win)
 
 Run tests after every subsequent phase. No snapshot tests on CSS.
 
@@ -94,7 +120,80 @@ Run tests after every subsequent phase. No snapshot tests on CSS.
 
 ## Phase 3: Decompose App.tsx
 
-Split without changing state flow or timing:
+Split without changing state flow or timing. Define the hook contract **before** moving code.
+
+### Hook contract
+
+AI logic reads and mutates the same state as human handlers. Compose hooks in `App.tsx` with an explicit typed interface:
+
+```ts
+// App.tsx — composition only
+const game = useQuartoGame();
+const ai = useAIController(game);
+```
+
+**[`useQuartoGame`](src/hooks/useQuartoGame.ts)** returns game state, setters, and human handlers:
+
+```ts
+interface QuartoGame {
+  // state
+  board: Board;
+  availablePieces: PieceAttributes[];
+  stagedPiece: PieceAttributes | null;
+  currentPlayer: Player;
+  gamePhase: GamePhase;
+  gameState: GameState;
+  winner: Player | null;
+  winningLine: [number, number][] | null;
+  lastMove: [number, number] | null;
+  // setters (needed by AI hook)
+  setBoard: React.Dispatch<React.SetStateAction<Board>>;
+  setAvailablePieces: React.Dispatch<React.SetStateAction<PieceAttributes[]>>;
+  setStagedPiece: React.Dispatch<React.SetStateAction<PieceAttributes | null>>;
+  setCurrentPlayer: React.Dispatch<React.SetStateAction<Player>>;
+  setGamePhase: React.Dispatch<React.SetStateAction<GamePhase>>;
+  setLastMove: React.Dispatch<React.SetStateAction<[number, number] | null>>;
+  // handlers
+  handlePieceSelect: (piece: PieceAttributes) => void;
+  handleCellClick: (row: number, col: number) => void;
+  startNewGame: () => void;
+  getGameStatusMessage: () => string;
+  resetAIExecutionRefs: () => void; // clears pendingExecutionRef + executionCountRef
+}
+```
+
+**[`useAIController`](src/hooks/useAIController.ts)** accepts `QuartoGame` and returns AI settings + execution:
+
+```ts
+function useAIController(game: QuartoGame): {
+  player1AI: boolean;
+  setPlayer1AI: ...;
+  player2AI: boolean;
+  setPlayer2AI: ...;
+  basicAIDifficulty: AIDifficulty;
+  setBasicAIDifficulty: ...;
+  enableAILogging: boolean;
+  setEnableAILogging: ...;
+}
+```
+
+`useAIController` reads `game.board`, `game.stagedPiece`, etc. and calls `game.setBoard`, `game.setAvailablePieces`, etc. It does **not** duplicate game state.
+
+**`startNewGame` coupling:** `useQuartoGame.startNewGame` must call `game.resetAIExecutionRefs()` (implemented in `useAIController` and passed in, or invoked via a callback ref) so AI pending timers/refs reset with the board — same behavior as today.
+
+### Fixing `useCallback` / stale closures
+
+Functional `setState` alone is not enough: `executeBasicAIMove` also closes over `board`, `stagedPiece`, `enableAILogging`, and `basicAIDifficulty`.
+
+Apply all of the following:
+
+1. Use functional updates where state derives from prior state (`setAvailablePieces(prev => prev.filter(...))`, etc.).
+2. Include all genuinely needed values in `executeAIMove` dependency array (`board`, `basicAIDifficulty`, `enableAILogging`, …).
+3. If stable callback identity is still needed for the AI `useEffect`, use **refs** for `basicAIDifficulty` and `enableAILogging` (updated each render) while keeping board/stagedPiece in deps or refs consistently.
+
+Goal: remove the `eslint-disable-next-line react-hooks/exhaustive-deps` without changing AI timing or move selection.
+
+### Hook contents
 
 **[`src/hooks/useQuartoGame.ts`](src/hooks/useQuartoGame.ts)** — game state + human interactions:
 
@@ -107,7 +206,6 @@ Split without changing state flow or timing:
 - State: `player1AI`, `player2AI`, `basicAIDifficulty`, `enableAILogging`
 - Refs: `pendingExecutionRef`, `executionCountRef` (drop `lastExecutionKeyRef`)
 - Functions: `executeAIMove`, `applyAIMove`, `applyAIMovePart2`, AI `useEffect` with same 700ms delay
-- Fix `useCallback` deps properly using **functional `setState`** (`setBoard(prev => ...)`, `setAvailablePieces(prev => ...)`) so the eslint disable can be removed without behavior change
 
 **Modal components** (pure presentational extraction from App JSX):
 
@@ -122,6 +220,7 @@ Split without changing state flow or timing:
 flowchart TD
   App["App.tsx"] --> useQuartoGame
   App --> useAIController
+  useAIController -->|"reads/writes via QuartoGame"| useQuartoGame
   App --> GameBoard
   App --> PieceSet
   App --> ControlPanel
@@ -136,7 +235,7 @@ flowchart TD
 
 **[`src/ai.ts`](src/ai.ts):**
 
-- Import `BOARD_SIZE` from constants
+- Import `BOARD_SIZE` from constants; use `AIDifficulty` from `types/game.ts`
 - Hoist inline `getMinSafePieces` to module level alongside existing `getRandomChance`
 - Remove unused `AIOutput` interface
 - Keep all difficulty constants and algorithm logic identical
@@ -150,8 +249,7 @@ export function debugLog(enabled: boolean, ...args: unknown[]) {
 ```
 
 - Replace `if (enableLogging) console.log(...)` blocks in `ai.ts` with `debugLog`
-- Gate App-side AI trace logs behind `enableAILogging` (same flag already exposed in AI Settings modal) — removes unconditional console noise without changing visible UI
-- Remove or gate human-action debug logs in `handleCellClick` / `handlePieceSelect` the same way, or drop them entirely (they never surface to the player)
+- Gate **all** App-side debug logs (AI trace **and** human `handleCellClick` / `handlePieceSelect` logs) behind `enableAILogging` — same flag already exposed in AI Settings modal; removes unconditional console noise without changing visible UI
 
 ---
 
@@ -162,7 +260,7 @@ export function debugLog(enabled: boolean, ...args: unknown[]) {
 - Use `arePiecesEqual` instead of manual 4-field comparison
 - Remove `selectedPiece` prop and `isPieceSelected` — state is always `null` today, so selection highlight never worked; removing it preserves current visible behavior
 
-**[`src/App.tsx`](src/App.tsx):**
+**[`src/App.tsx`](src/App.tsx)** (or `useQuartoGame` after decomposition):
 
 - Remove `selectedPiece` state and related `setSelectedPiece` calls
 
@@ -183,7 +281,7 @@ After all phases, manually smoke-test (unchanged UX):
 1. New game: Player 1 AI gives piece, human places
 2. Human vs human: give → place → give cycle, win detection, tie on full board
 3. AI vs AI at each difficulty — moves still occur with ~700ms delays
-4. Enable AI Logging — console output still appears when checked
+4. Enable AI Logging — console output still appears when checked (AI + human action traces)
 5. Modals: Rules, About, AI Settings open/close correctly
 6. `npm run build` and `npm test` pass
 
@@ -193,16 +291,16 @@ After all phases, manually smoke-test (unchanged UX):
 
 Work in this sequence so tests guard each step:
 
-1. Phase 1 (constants/types) + Phase 2 (tests)
+1. Phase 1 (constants/types + win-line dedup) + Phase 2 (tests)
 2. Phase 4 (ai.ts cleanup + logger) — easy to test
-3. Phase 5 (dead code + PieceSet) — small diffs
-4. Phase 3 (App decomposition) — largest change, tests + manual smoke-test last
+3. Phase 5 (dead code + PieceSet) — **before** hook extraction; do not move dead state into new hooks
+4. Phase 3 (App decomposition) — largest change; rely on tests + manual smoke-test last
 
 ## Files touched (summary)
 
 | Action | Files |
 |--------|-------|
 | New | `types/game.ts`, `constants/game.ts`, `utils/logger.ts`, `hooks/useQuartoGame.ts`, `hooks/useAIController.ts`, `components/modals/*`, `*.test.ts`, `vitest.config.ts` |
-| Refactor | `App.tsx`, `ai.ts`, `gameUtils.ts`, `Piece.tsx`, `PieceSet.tsx`, `GameBoard.tsx` |
+| Refactor | `App.tsx`, `ai.ts`, `gameUtils.ts`, `Piece.tsx`, `PieceSet.tsx`, `GameBoard.tsx`, `ControlPanel.tsx` |
 | Cleanup only | `App.css` (remove `.mcts-config`) |
 | Untouched | `mcts.ts`, `mctsPlayer.ts`, all MCTS imports/logic |

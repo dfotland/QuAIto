@@ -1,8 +1,6 @@
-import { type PieceAttributes } from './components/Piece';
+import { BOARD_SIZE } from './constants/game';
+import { type AIDifficulty, type Board, type PieceAttributes, type Player } from './types/game';
 import { checkWinCondition, formatPieceForLogging } from './utils/gameUtils';
-
-// Game Board Constants
-const BOARD_SIZE = 4; // 4x4 game board
 
 // AI Win Check Miss Probabilities (chance to miss obvious wins)
 const EASY_WIN_MISS_CHANCE = 0.5; 
@@ -28,13 +26,13 @@ export interface BoardPosition {
 }
 
 export interface AIInput {
-  currentPlayer: 1 | 2;
+  currentPlayer: Player;
   gamePhase: 'give' | 'place';
-  board: (PieceAttributes | null)[][];
+  board: Board;
   pieceToPlace?: PieceAttributes | null;
   availablePieces: PieceAttributes[];
   enableLogging?: boolean;
-  difficulty?: 'easy' | 'normal' | 'hard' | 'brutal'; // AI difficulty level
+  difficulty?: AIDifficulty;
 }
 
 export interface AIOutput {
@@ -46,7 +44,7 @@ export interface AIOutput {
 /**
  * Get random chance based on difficulty level
  */
-function getRandomChance(difficulty: 'easy' | 'normal' | 'hard' | 'brutal'): number {
+function getRandomChance(difficulty: AIDifficulty): number {
   switch (difficulty) {
     case 'easy': return EASY_RANDOM_CHANCE;
     case 'normal': return NORMAL_RANDOM_CHANCE;
@@ -64,7 +62,7 @@ export interface AIMove {
 /**
  * Get all empty positions on the board
  */
-function getEmptyPositions(board: (PieceAttributes | null)[][]): BoardPosition[] {
+function getEmptyPositions(board: Board): BoardPosition[] {
   const emptyPositions: BoardPosition[] = [];
   
   for (let row = 0; row < BOARD_SIZE; row++) {
@@ -90,7 +88,7 @@ function getRandomElement<T>(array: T[]): T {
  * Check if placing a specific piece on the board would allow the opponent to win
  * This checks if the piece attributes could complete any existing 3-in-a-row patterns
  */
-function canPieceLeadToWin(piece: PieceAttributes, board: (PieceAttributes | null)[][], enableLogging: boolean = false): boolean {
+function canPieceLeadToWin(piece: PieceAttributes, board: Board, enableLogging: boolean = false): boolean {
   // Get all empty positions where the opponent could place this piece
   const emptyPositions = getEmptyPositions(board);
   
@@ -153,7 +151,7 @@ export function makeAIPlacement(input: AIInput): BoardPosition | null {
   }
 
   // Map difficulty levels to win check skip probabilities
-  const winCheckSkipMap: Record<'easy' | 'normal' | 'hard' | 'brutal', number> = {
+  const winCheckSkipMap: Record<AIDifficulty, number> = {
     easy: EASY_WIN_MISS_CHANCE,
     normal: NORMAL_WIN_MISS_CHANCE,
     hard: HARD_WIN_MISS_CHANCE,
@@ -198,7 +196,7 @@ export function makeAIPlacement(input: AIInput): BoardPosition | null {
   }
 
   // Set minimum safe pieces threshold based on difficulty
-  const getMinSafePieces = (difficulty: 'easy' | 'normal' | 'hard' | 'brutal'): number => {
+  const getMinSafePieces = (difficulty: AIDifficulty): number => {
     switch (difficulty) {
       case 'easy': return EASY_MIN_SAFE_PIECES;
       case 'normal': return NORMAL_MIN_SAFE_PIECES;

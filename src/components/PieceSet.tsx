@@ -1,5 +1,6 @@
 import React from 'react';
-import Piece, { type PieceAttributes } from './Piece';
+import type { GamePhase, PieceAttributes } from '../types/game';
+import Piece from './Piece';
 import './PieceSet.css';
 import { generateAllPieces, getPieceId } from '../utils/gameUtils';
 
@@ -7,7 +8,7 @@ interface PieceSetProps {
   availablePieces: PieceAttributes[];
   selectedPiece: PieceAttributes | null;
   onPieceSelect: (piece: PieceAttributes) => void;
-  gamePhase?: 'give' | 'place';
+  gamePhase?: GamePhase;
   gameOver?: boolean;
 }
 
