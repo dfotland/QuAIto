@@ -1,17 +1,19 @@
 ---
-description: "QuAIto AI — heuristic engine, difficulty tiers, MCTS module"
-globs: ["src/ai/**/*.ts", "src/ai.ts"]
+description: "QuAIto AI — heuristic engine, difficulty tiers, MCTS integration"
+globs: ["src/ai/**/*.ts", "src/ai.ts", "src/hooks/useAIController.ts", "src/components/modals/AIConfigModal.tsx"]
 alwaysApply: false
 ---
 
 # AI system
 
 ## Entry point
-- `makeAIMove()` in `src/ai.ts` is the primary AI used by `App.tsx`.
+- `makeAIMove()` in `src/ai.ts` is the **heuristic AI** used when a heuristic difficulty is selected.
 - It calls `makeAIPlacement()` then `makeAIPieceSelection()` separately for place and give phases.
+- `useAIController` orchestrates AI turns — route by **selected difficulty**, not by replacing this file wholesale.
 
-## Heuristic AI (`src/ai.ts`)
-Difficulty levels: `easy` | `normal` | `hard` | `brutal`.
+## Heuristic AI (`src/ai.ts`) — do not break
+
+Difficulty levels: `easy` | `normal` | `hard` | `brutal` | `mcts` (UI label **MCTS**, to the right of Brutal).
 
 | Level | Random move chance | Win-check skip chance | Min safe pieces |
 |-------|-------------------|----------------------|-----------------|
@@ -28,13 +30,23 @@ Constants are at the top of `ai.ts`. Logic priorities:
 
 Enable `enableLogging` on `AIInput` for console decision traces.
 
-## MCTS module (`src/ai/mcts.ts`, `src/ai/mctsPlayer.ts`)
-- Separate Monte Carlo Tree Search implementation with configurable iterations and playout depth.
-- `MCTSAIPlayer.getBestMove()` wraps the search engine.
-- Not wired as the default in `makeAIMove()` — extend or swap callers in `App.tsx` to use MCTS.
-- Preserve separation: keep MCTS state/search in `ai/mcts.ts`, keep app-facing API thin in `mctsPlayer.ts`.
+**When integrating MCTS:** keep `makeAIMove()` and all four heuristic levels working unchanged. Existing tests and gameplay for `easy`–`brutal` must still pass.
+
+## MCTS (`@smart-games/mcts`) — additive difficulty, not a replacement
+
+- MCTS is selected when the user picks **MCTS** in AI Configuration (to the right of Brutal).
+- **Do not** make MCTS the default or remove heuristic levels from the UI.
+- **Do not** rewrite `src/ai.ts` to call MCTS internally — branch in `useAIController` based on difficulty.
+- Use `getQuartoMctsCoordinator().computeMove()` once per AI turn; apply via `atomicMovesToAIMove()`. Never call the worker directly.
+- Worker bootstrap: `src/mcts/worker-entry.ts` imports `@smart-games/mcts/worker-host` and registers Quarto only.
+- Map QuAIto player `1 | 2` ↔ MCTS `PlayerId` `0 | 1` in `serializeQuartoGameState()` only.
+- On new game or AI toggle mid-think: `stopQuartoMctsSearch()`.
+
+### Legacy local MCTS (`src/ai/mcts.ts`, `src/ai/mctsPlayer.ts`)
+- Superseded by `@smart-games/mcts` — safe to delete once verified; do not wire back into `useAIController`.
 
 ## When changing AI
-- Tune constants in `ai.ts` rather than hard-coding magic numbers in functions.
-- Test all four difficulty levels and both phases (place and give).
+- Tune heuristic constants in `ai.ts` — not inline magic numbers.
+- Test **all heuristic difficulties** (`easy`–`brutal`) **and** each new MCTS difficulty option; both phases (place and give).
 - Winning placement ends the turn early — no piece is given after a win.
+- Stopping mid-think: call `coordinator.stop()` on new game / AI toggle (same as resetting heuristic AI execution refs).

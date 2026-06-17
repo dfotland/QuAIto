@@ -8,15 +8,29 @@ import AboutModal from './components/modals/AboutModal';
 import AIConfigModal from './components/modals/AIConfigModal';
 import RulesModal from './components/modals/RulesModal';
 import { useAIController } from './hooks/useAIController';
-import type { AIResetRef, EnableAILoggingRef } from './hooks/quartoGameTypes';
+import { useHumanInteraction } from './hooks/useHumanInteraction';
+import type { AIResetRef, EnableAILoggingRef, HumanInputGuardRef } from './hooks/quartoGameTypes';
 import { useQuartoGame } from './hooks/useQuartoGame';
 import './App.css';
 
 function App() {
   const aiResetRef = useRef<(() => void) | null>(null) as AIResetRef;
   const enableAILoggingRef = useRef(false) as EnableAILoggingRef;
-  const game = useQuartoGame(aiResetRef, enableAILoggingRef);
+  const humanInputGuardRef = useRef<() => boolean>(() => false) as HumanInputGuardRef;
+  const game = useQuartoGame(aiResetRef, enableAILoggingRef, humanInputGuardRef);
   const ai = useAIController(game, aiResetRef, enableAILoggingRef);
+
+  const { canHumanInteract, canHumanInteractNow, guardCellClick, guardPieceSelect } = useHumanInteraction({
+    gameState: game.gameState,
+    currentPlayer: game.currentPlayer,
+    player1AI: ai.player1AI,
+    player2AI: ai.player2AI,
+    isAIThinking: ai.isAIThinking,
+    isAIThinkingRef: ai.isAIThinkingRef,
+    aiTurnLockRef: ai.aiTurnLockRef,
+  });
+
+  humanInputGuardRef.current = canHumanInteractNow;
 
   const [showAIConfig, setShowAIConfig] = useState(false);
   const [showRules, setShowRules] = useState(false);
@@ -39,10 +53,11 @@ function App() {
 
         <div className="game-board-area">
           <GameBoard
-            onCellClick={game.handleCellClick}
+            onCellClick={(row, col) => guardCellClick(game.handleCellClick, row, col)}
             board={game.board}
             winningLine={game.winningLine}
             gameOver={game.gameState !== 'playing'}
+            interactionDisabled={!canHumanInteractNow()}
             lastMove={game.lastMove}
           />
         </div>
@@ -51,8 +66,8 @@ function App() {
           <h3>Available Pieces ({game.availablePieces.length}/{TOTAL_PIECES})</h3>
           <PieceSet
             availablePieces={game.availablePieces}
-            onPieceSelect={game.handlePieceSelect}
-            gamePhase={game.gamePhase}
+            onPieceSelect={(piece) => guardPieceSelect(game.handlePieceSelect, piece)}
+            canSelectPieces={game.gamePhase === 'give' && canHumanInteractNow()}
             gameOver={game.gameState !== 'playing'}
           />
         </div>
@@ -71,10 +86,14 @@ function App() {
               <p className="player-status tie-announcement">It's a tie! 🤝</p>
             )}
             {game.gameState === 'playing' && (
-              <p className="player-status">{game.getGameStatusMessage()}</p>
+              ai.isAIThinking ? (
+                <p className="player-status ai-thinking">Player {game.currentPlayer} (AI) is thinking…</p>
+              ) : (
+                <p className="player-status">{game.getGameStatusMessage()}</p>
+              )
             )}
           </div>
-          <div className="staging-area">
+          <div className={`staging-area ${!canHumanInteract ? 'disabled' : ''}`}>
             {game.stagedPiece ? (
               <div className="staged-piece">
                 <Piece attributes={game.stagedPiece} />

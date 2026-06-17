@@ -9,12 +9,20 @@ interface GameBoardProps {
   board?: Board;
   winningLine?: [number, number][] | null;
   gameOver?: boolean;
+  interactionDisabled?: boolean;
   lastMove?: [number, number] | null;
 }
 
-const GameBoard: React.FC<GameBoardProps> = ({ onCellClick, board, winningLine, gameOver, lastMove }) => {
+const GameBoard: React.FC<GameBoardProps> = ({
+  onCellClick,
+  board,
+  winningLine,
+  gameOver,
+  interactionDisabled = false,
+  lastMove,
+}) => {
   const handleCellClick = (row: number, col: number) => {
-    if (onCellClick && !gameOver) {
+    if (onCellClick && !gameOver && !interactionDisabled) {
       onCellClick(row, col);
     }
   };
@@ -37,7 +45,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ onCellClick, board, winningLine, 
     return (
       <div
         key={`${row}-${col}`}
-        className={`board-cell ${isWinning ? 'winning-cell' : ''} ${isLastMove ? 'last-move-cell' : ''} ${gameOver ? 'game-over' : ''}`}
+        className={`board-cell ${isWinning ? 'winning-cell' : ''} ${isLastMove ? 'last-move-cell' : ''} ${gameOver || interactionDisabled ? 'interaction-disabled' : ''}`}
         onClick={() => handleCellClick(row, col)}
       >
         {piece && <Piece attributes={piece} />}
@@ -46,7 +54,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ onCellClick, board, winningLine, 
   };
 
   return (
-    <div className="board-grid">
+    <div className={`board-grid ${interactionDisabled ? 'disabled' : ''}`}>
       {Array.from({ length: BOARD_SIZE }, (_, rowIndex) =>
         Array.from({ length: BOARD_SIZE }, (_, colIndex) => renderCell(rowIndex, colIndex))
       )}

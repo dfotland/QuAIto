@@ -11,9 +11,13 @@ import {
   isBoardFull,
 } from '../utils/gameUtils';
 import { debugLog } from '../utils/logger';
-import type { AIResetRef, EnableAILoggingRef, QuartoGame } from './quartoGameTypes';
+import type { AIResetRef, EnableAILoggingRef, HumanInputGuardRef, QuartoGame } from './quartoGameTypes';
 
-export function useQuartoGame(aiResetRef: AIResetRef, enableAILoggingRef: EnableAILoggingRef): QuartoGame {
+export function useQuartoGame(
+  aiResetRef: AIResetRef,
+  enableAILoggingRef: EnableAILoggingRef,
+  humanInputGuardRef: HumanInputGuardRef,
+): QuartoGame {
   const [board, setBoard] = useState(createEmptyBoard);
   const [availablePieces, setAvailablePieces] = useState<PieceAttributes[]>(generateAllPieces);
   const [stagedPiece, setStagedPiece] = useState<PieceAttributes | null>(null);
@@ -35,6 +39,10 @@ export function useQuartoGame(aiResetRef: AIResetRef, enableAILoggingRef: Enable
   }, [board, currentPlayer, gamePhase]);
 
   const handlePieceSelect = (piece: PieceAttributes) => {
+    if (!humanInputGuardRef.current()) {
+      debugLog(enableAILoggingRef.current, 'handlePieceSelect blocked: human input disabled');
+      return;
+    }
     if (gamePhase === 'give' && gameState === 'playing') {
       debugLog(
         enableAILoggingRef.current,
@@ -57,6 +65,10 @@ export function useQuartoGame(aiResetRef: AIResetRef, enableAILoggingRef: Enable
   };
 
   const handleCellClick = (row: number, col: number) => {
+    if (!humanInputGuardRef.current()) {
+      debugLog(enableAILoggingRef.current, 'handleCellClick blocked: human input disabled');
+      return;
+    }
     if (!board[row][col] && gamePhase === 'place' && stagedPiece && gameState === 'playing') {
       setBoard(prev => {
         const newBoard = prev.map(r => [...r]);

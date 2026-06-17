@@ -71,6 +71,25 @@
 
 /* Removed lastMovePulse animation - no longer animating last move */
 
+.player-status.ai-thinking {
+  color: #555;
+  font-style: italic;
+}
+
+.board-grid.disabled {
+  pointer-events: none;
+  opacity: 0.72;
+}
+
+.board-cell.interaction-disabled {
+  cursor: default;
+}
+
+.board-cell.interaction-disabled:hover {
+  background-color: #D2B48C;
+  border-color: #8B4513;
+}
+
 .board-cell.game-over {
   cursor: default;
 }

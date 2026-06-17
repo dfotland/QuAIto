@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AI_THINKING_DELAY_MS } from '../constants/game';
 import { makeAIMove, type AIInput } from '../ai';
+import { atomicMovesToAIMove, sanitizeMctsAIMoveForPhase } from '../mcts/parse-move';
+import { formatMctsCoordinatorResult } from '../mcts/log-mcts-result';
+import { getQuartoMctsCoordinator, stopQuartoMctsSearch } from '../mcts/coordinator-service';
+import { MCTS_TIME_LIMIT_MS, QuartoSearchParameters } from '../mcts/search-parameters';
+import { serializeQuartoGameState } from '../mcts/serialize-state';
 import type { AIDifficulty, PieceAttributes } from '../types/game';
 import { arePiecesEqual, formatPieceForLogging, getOpponent } from '../utils/gameUtils';
 import { debugLog } from '../utils/logger';
-import type { AIResetRef, EnableAILoggingRef, QuartoGame } from './quartoGameTypes';
+import type { AIResetRef, AIThinkingRef, EnableAILoggingRef, HumanInputGuardRef, QuartoGame } from './quartoGameTypes';
 
 export interface AIController {
   player1AI: boolean;
@@ -15,6 +20,10 @@ export interface AIController {
   setBasicAIDifficulty: (value: AIDifficulty) => void;
   enableAILogging: boolean;
   setEnableAILogging: (value: boolean) => void;
+  isAIThinking: boolean;
+  isAIThinkingRef: AIThinkingRef;
+  /** True while AI move is scheduled, running, or awaiting part 2. */
+  aiTurnLockRef: HumanInputGuardRef;
 }
 
 interface AIMovePayload {
@@ -46,6 +55,14 @@ export function useAIController(
   const [player2AI, setPlayer2AI] = useState(false);
   const [basicAIDifficulty, setBasicAIDifficulty] = useState<AIDifficulty>('easy');
   const [enableAILogging, setEnableAILogging] = useState(false);
+  const [isAIThinking, setAIThinkingState] = useState(false);
+  const isAIThinkingRef = useRef(false);
+  const aiTurnLockRef = useRef<() => boolean>(() => false);
+
+  const setAIThinking = useCallback((thinking: boolean) => {
+    isAIThinkingRef.current = thinking;
+    setAIThinkingState(thinking);
+  }, []);
 
   const executionCountRef = useRef(0);
   const pendingExecutionRef = useRef(false);
@@ -54,10 +71,39 @@ export function useAIController(
   const effectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const part2TimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const basicAIDifficultyRef = useRef(basicAIDifficulty);
-  const executeAIMoveRef = useRef<() => void>(() => {});
+  const executeAIMoveRef = useRef<() => Promise<void>>(async () => {});
+  const mctsSearchSeedRef = useRef(1);
+  const gamePhaseRef = useRef(gamePhase);
+  const stagedPieceRef = useRef(stagedPiece);
+  const currentPlayerRef = useRef(currentPlayer);
 
   enableAILoggingRef.current = enableAILogging;
   basicAIDifficultyRef.current = basicAIDifficulty;
+  gamePhaseRef.current = gamePhase;
+  stagedPieceRef.current = stagedPiece;
+  currentPlayerRef.current = currentPlayer;
+
+  aiTurnLockRef.current = () =>
+    pendingExecutionRef.current ||
+    aiMoveInProgressRef.current ||
+    part2TimerRef.current !== null;
+
+  const isAIPlayer = useCallback(
+    (player: typeof currentPlayer) =>
+      (player === 1 && player1AI) || (player === 2 && player2AI),
+    [player1AI, player2AI],
+  );
+
+  /** AI may only act in give phase, or place phase when it has a piece to place. */
+  const shouldAIActNow = useCallback(() => {
+    const player = currentPlayerRef.current;
+    const phase = gamePhaseRef.current;
+    const staged = stagedPieceRef.current;
+    if (!isAIPlayer(player)) return false;
+    if (phase === 'give') return true;
+    if (phase === 'place' && staged !== null) return true;
+    return false;
+  }, [isAIPlayer]);
 
   const clearEffectTimer = useCallback(() => {
     if (effectTimerRef.current !== null) {
@@ -76,16 +122,19 @@ export function useAIController(
   const completeAIMove = useCallback(() => {
     aiMoveInProgressRef.current = false;
     pendingExecutionRef.current = false;
-  }, []);
+    setAIThinking(false);
+  }, [setAIThinking]);
 
   const resetAIExecutionRefs = useCallback(() => {
+    stopQuartoMctsSearch();
     scheduleGenerationRef.current += 1;
     clearEffectTimer();
     clearPart2Timer();
     executionCountRef.current = 0;
     aiMoveInProgressRef.current = false;
     pendingExecutionRef.current = false;
-  }, [clearEffectTimer, clearPart2Timer]);
+    setAIThinking(false);
+  }, [clearEffectTimer, clearPart2Timer, setAIThinking]);
 
   aiResetRef.current = resetAIExecutionRefs;
 
@@ -149,6 +198,9 @@ export function useAIController(
         });
         setLastMove([aiMove.placement.row, aiMove.placement.col]);
         setStagedPiece(null);
+        if (aiMove.pieceToGive) {
+          setGamePhase('give');
+        }
 
         debugLog(enableAILoggingRef.current, `✅ STEP 1 COMPLETE - Piece placed, staged piece cleared`);
 
@@ -183,6 +235,7 @@ export function useAIController(
       setBoard,
       setLastMove,
       setStagedPiece,
+      setGamePhase,
       applyAIMovePart2,
       schedulePart2,
       completeAIMove,
@@ -191,7 +244,12 @@ export function useAIController(
 
   const executeBasicAIMove = useCallback(() => {
     executionCountRef.current += 1;
-    debugLog(enableAILoggingRef.current, `🤖 Basic AI (Player ${currentPlayer}) is thinking... [Execution #${executionCountRef.current}]`);
+    const difficulty = basicAIDifficultyRef.current;
+    if (difficulty === 'mcts') {
+      throw new Error('executeBasicAIMove must not be used for MCTS difficulty');
+    }
+
+    debugLog(enableAILoggingRef.current, `🤖 Basic AI (Player ${currentPlayer}, ${difficulty}) is thinking... [Execution #${executionCountRef.current}]`);
 
     const aiInput: AIInput = {
       currentPlayer,
@@ -200,7 +258,7 @@ export function useAIController(
       pieceToPlace: stagedPiece,
       availablePieces,
       enableLogging: enableAILoggingRef.current,
-      difficulty: basicAIDifficultyRef.current,
+      difficulty,
     };
 
     const aiMove = makeAIMove(aiInput);
@@ -215,24 +273,101 @@ export function useAIController(
     };
   }, [board, stagedPiece, availablePieces, currentPlayer, gamePhase]);
 
-  const executeAIMove = useCallback(() => {
+  const executeMctsAIMove = useCallback(async () => {
+    executionCountRef.current += 1;
+    debugLog(enableAILoggingRef.current, `🤖 MCTS AI (Player ${currentPlayer}) is thinking... [Execution #${executionCountRef.current}]`);
+
+    try {
+      const coordinator = await getQuartoMctsCoordinator();
+      const result = await coordinator.computeMove({
+        state: serializeQuartoGameState(
+          board,
+          stagedPiece,
+          availablePieces,
+          currentPlayer,
+          gamePhase,
+        ),
+        params: QuartoSearchParameters.forMcts(mctsSearchSeedRef.current++),
+        timeLimitMs: MCTS_TIME_LIMIT_MS,
+        thinkingDelayMs: 0,
+      });
+
+      if (result.interrupted) {
+        debugLog(enableAILoggingRef.current, '🛑 MCTS search interrupted');
+        for (const line of formatMctsCoordinatorResult(result)) {
+          debugLog(enableAILoggingRef.current, `📊 MCTS stats: ${line}`);
+        }
+        return null;
+      }
+
+      for (const line of formatMctsCoordinatorResult(result)) {
+        debugLog(enableAILoggingRef.current, `📊 MCTS stats: ${line}`);
+      }
+
+      const aiMove = atomicMovesToAIMove(result.moves);
+
+      debugLog(enableAILoggingRef.current, `🎯 MCTS AI move completed [Execution #${executionCountRef.current}] (${result.totalIterations} iterations)`);
+      debugLog(
+        enableAILoggingRef.current,
+        `🔍 MCTS RETURNED - Place: ${aiMove.placement ? `(${aiMove.placement.row}, ${aiMove.placement.col})` : 'null'} - Give: ${aiMove.pieceToGive ? formatPieceForLogging(aiMove.pieceToGive) : 'null'}`
+      );
+
+      return aiMove;
+    } catch (error) {
+      debugLog(enableAILoggingRef.current, '❌ MCTS search failed:', error);
+      return null;
+    }
+  }, [board, stagedPiece, availablePieces, currentPlayer, gamePhase]);
+
+  const executeAIMove = useCallback(async () => {
     if (gameState !== 'playing') {
       completeAIMove();
       return;
     }
 
-    const isCurrentPlayerAI = (currentPlayer === 1 && player1AI) || (currentPlayer === 2 && player2AI);
-    if (!isCurrentPlayerAI) {
+    if (!shouldAIActNow()) {
       completeAIMove();
       return;
     }
 
+    const generation = scheduleGenerationRef.current;
+    const turnPlayer = currentPlayerRef.current;
+    const turnPhase = gamePhaseRef.current;
+    const turnStagedPiece = stagedPieceRef.current;
+
     debugLog(enableAILoggingRef.current, `🎯 ======= AI MOVE START =======`);
-    debugLog(enableAILoggingRef.current, `🎯 AI (Player ${currentPlayer}) executing move in phase: ${gamePhase}`);
-    debugLog(enableAILoggingRef.current, `🎯 Staged piece available: ${stagedPiece ? formatPieceForLogging(stagedPiece) : 'null'} ${stagedPiece ? `(height:${stagedPiece.height}, color:${stagedPiece.color}, shape:${stagedPiece.shape}, top:${stagedPiece.top})` : ''}`);
+    debugLog(enableAILoggingRef.current, `🎯 AI (Player ${turnPlayer}) executing move in phase: ${turnPhase}`);
+    debugLog(enableAILoggingRef.current, `🎯 Staged piece available: ${turnStagedPiece ? formatPieceForLogging(turnStagedPiece) : 'null'} ${turnStagedPiece ? `(height:${turnStagedPiece.height}, color:${turnStagedPiece.color}, shape:${turnStagedPiece.shape}, top:${turnStagedPiece.top})` : ''}`);
     debugLog(enableAILoggingRef.current, `🎯 Available pieces count: ${availablePieces.length}`);
 
-    const aiMove = executeBasicAIMove();
+    let aiMove: AIMovePayload | null = null;
+
+    try {
+      if (basicAIDifficultyRef.current === 'mcts') {
+        const rawMove = await executeMctsAIMove();
+        aiMove =
+          rawMove === null
+            ? null
+            : sanitizeMctsAIMoveForPhase(rawMove, turnPhase, turnStagedPiece !== null);
+      } else {
+        aiMove = executeBasicAIMove();
+      }
+    } catch (error) {
+      debugLog(enableAILoggingRef.current, '❌ AI move execution failed:', error);
+      completeAIMove();
+      return;
+    }
+
+    if (generation !== scheduleGenerationRef.current) {
+      completeAIMove();
+      return;
+    }
+
+    if (!isAIPlayer(currentPlayerRef.current) || !shouldAIActNow()) {
+      debugLog(enableAILoggingRef.current, '🛑 AI turn no longer valid after search — discarding move');
+      completeAIMove();
+      return;
+    }
 
     if (aiMove) {
       applyAIMove(aiMove);
@@ -241,13 +376,11 @@ export function useAIController(
     }
   }, [
     gameState,
-    currentPlayer,
-    player1AI,
-    player2AI,
-    gamePhase,
-    stagedPiece,
-    availablePieces,
+    availablePieces.length,
+    shouldAIActNow,
+    isAIPlayer,
     executeBasicAIMove,
+    executeMctsAIMove,
     applyAIMove,
     completeAIMove,
   ]);
@@ -255,39 +388,46 @@ export function useAIController(
   executeAIMoveRef.current = executeAIMove;
 
   useEffect(() => {
-    const isCurrentPlayerAI = (currentPlayer === 1 && player1AI) || (currentPlayer === 2 && player2AI);
-
-    if (gameState !== 'playing' || !isCurrentPlayerAI) {
+    if (gameState !== 'playing' || !shouldAIActNow()) {
       return;
     }
 
-    if (pendingExecutionRef.current || aiMoveInProgressRef.current) {
+    if (pendingExecutionRef.current || aiMoveInProgressRef.current || part2TimerRef.current !== null) {
       debugLog(enableAILoggingRef.current, '🚫 AI execution already pending or in progress, skipping...');
       return;
     }
 
     pendingExecutionRef.current = true;
+    setAIThinking(true);
     const generation = scheduleGenerationRef.current;
 
     effectTimerRef.current = setTimeout(() => {
       effectTimerRef.current = null;
       if (generation !== scheduleGenerationRef.current) {
         pendingExecutionRef.current = false;
+        setAIThinking(false);
+        return;
+      }
+
+      if (!shouldAIActNow()) {
+        pendingExecutionRef.current = false;
+        setAIThinking(false);
         return;
       }
 
       aiMoveInProgressRef.current = true;
-      executeAIMoveRef.current();
+      void executeAIMoveRef.current();
     }, AI_THINKING_DELAY_MS);
 
     return () => {
       clearEffectTimer();
-      scheduleGenerationRef.current += 1;
-      if (!aiMoveInProgressRef.current) {
+      if (!aiMoveInProgressRef.current && part2TimerRef.current === null) {
+        scheduleGenerationRef.current += 1;
         pendingExecutionRef.current = false;
+        setAIThinking(false);
       }
     };
-  }, [currentPlayer, gamePhase, gameState, player1AI, player2AI, clearEffectTimer]);
+  }, [currentPlayer, gamePhase, gameState, stagedPiece, player1AI, player2AI, basicAIDifficulty, clearEffectTimer, shouldAIActNow]);
 
   return {
     player1AI,
@@ -298,5 +438,8 @@ export function useAIController(
     setBasicAIDifficulty,
     enableAILogging,
     setEnableAILogging,
+    isAIThinking,
+    isAIThinkingRef,
+    aiTurnLockRef,
   };
 }

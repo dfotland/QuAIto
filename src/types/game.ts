@@ -8,5 +8,6 @@ export interface PieceAttributes {
 export type Player = 1 | 2;
 export type GamePhase = 'place' | 'give';
 export type GameState = 'playing' | 'won' | 'tie';
-export type AIDifficulty = 'easy' | 'normal' | 'hard' | 'brutal';
+export type HeuristicAIDifficulty = 'easy' | 'normal' | 'hard' | 'brutal';
+export type AIDifficulty = HeuristicAIDifficulty | 'mcts';
 export type Board = (PieceAttributes | null)[][];

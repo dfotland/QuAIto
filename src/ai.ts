@@ -1,5 +1,5 @@
 import { BOARD_SIZE } from './constants/game';
-import { type AIDifficulty, type Board, type PieceAttributes, type Player } from './types/game';
+import { type HeuristicAIDifficulty, type Board, type PieceAttributes, type Player } from './types/game';
 import { checkWinCondition, formatPieceForLogging } from './utils/gameUtils';
 import { debugLog } from './utils/logger';
 
@@ -33,7 +33,7 @@ export interface AIInput {
   pieceToPlace?: PieceAttributes | null;
   availablePieces: PieceAttributes[];
   enableLogging?: boolean;
-  difficulty?: AIDifficulty;
+  difficulty?: HeuristicAIDifficulty;
 }
 
 export interface AIMove {
@@ -41,7 +41,7 @@ export interface AIMove {
   pieceToGive: PieceAttributes | null;
 }
 
-function getRandomChance(difficulty: AIDifficulty): number {
+function getRandomChance(difficulty: HeuristicAIDifficulty): number {
   switch (difficulty) {
     case 'easy': return EASY_RANDOM_CHANCE;
     case 'normal': return NORMAL_RANDOM_CHANCE;
@@ -51,7 +51,7 @@ function getRandomChance(difficulty: AIDifficulty): number {
   }
 }
 
-function getMinSafePieces(difficulty: AIDifficulty): number {
+function getMinSafePieces(difficulty: HeuristicAIDifficulty): number {
   switch (difficulty) {
     case 'easy': return EASY_MIN_SAFE_PIECES;
     case 'normal': return NORMAL_MIN_SAFE_PIECES;
@@ -125,7 +125,7 @@ export function makeAIPlacement(input: AIInput): BoardPosition | null {
   debugLog(enableLogging, `🔵 Basic AI: Found ${emptyPositions.length} empty positions`);
   debugLog(enableLogging, '🔵 Basic AI: Checking for winning moves...');
 
-  const winCheckSkipMap: Record<AIDifficulty, number> = {
+  const winCheckSkipMap: Record<HeuristicAIDifficulty, number> = {
     easy: EASY_WIN_MISS_CHANCE,
     normal: NORMAL_WIN_MISS_CHANCE,
     hard: HARD_WIN_MISS_CHANCE,

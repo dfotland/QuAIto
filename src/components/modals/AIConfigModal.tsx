@@ -1,4 +1,5 @@
 import type { AIDifficulty } from '../../types/game';
+import { AI_DIFFICULTY_OPTIONS } from '../../constants/aiDifficulty';
 import ModalShell from './ModalShell';
 
 interface AIConfigModalProps {
@@ -53,16 +54,16 @@ export default function AIConfigModal({
       <div className="basic-ai-config">
         <label>AI Difficulty:</label>
         <div className="difficulty-selection">
-          {(['easy', 'normal', 'hard', 'brutal'] as const).map((level) => (
-            <label key={level} className={basicAIDifficulty === level ? 'selected' : ''}>
+          {AI_DIFFICULTY_OPTIONS.map(({ value, label }) => (
+            <label key={value} className={basicAIDifficulty === value ? 'selected' : ''}>
               <input
                 type="radio"
                 name="basicAIDifficulty"
-                value={level}
-                checked={basicAIDifficulty === level}
+                value={value}
+                checked={basicAIDifficulty === value}
                 onChange={(e) => setBasicAIDifficulty(e.target.value as AIDifficulty)}
               />
-              <span>{level.charAt(0).toUpperCase() + level.slice(1)}</span>
+              <span>{label}</span>
             </label>
           ))}
         </div>

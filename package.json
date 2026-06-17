@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@smart-games/common-spa": "file:./shared/common-spa",
+    "@smart-games/mcts": "file:../mcts",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   },

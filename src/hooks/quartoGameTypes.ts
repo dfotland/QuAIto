@@ -25,3 +25,7 @@ export interface QuartoGame {
 
 export type AIResetRef = MutableRefObject<(() => void) | null>;
 export type EnableAILoggingRef = MutableRefObject<boolean>;
+/** Returns true when human board/piece input is allowed right now. */
+export type InteractionGuardRef = MutableRefObject<() => boolean>;
+export type HumanInputGuardRef = MutableRefObject<() => boolean>;
+export type AIThinkingRef = MutableRefObject<boolean>;
