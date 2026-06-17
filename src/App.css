@@ -451,14 +451,6 @@
   transform: scale(1.1);
 }
 
-.mcts-config {
-  border: 1px solid #ddd;
-  border-radius: calc(var(--piece-base-size) * 0.12);
-  padding: calc(var(--piece-base-size) * 0.25);
-  background: rgba(240, 248, 255, 0.5);
-  margin-bottom: calc(var(--piece-base-size) * 0.3);
-}
-
 /* Rules and About Modal Content Styles */
 .rules-section,
 .about-section {

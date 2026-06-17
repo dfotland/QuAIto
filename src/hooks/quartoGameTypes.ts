@@ -5,7 +5,6 @@ export interface QuartoGame {
   board: Board;
   availablePieces: PieceAttributes[];
   stagedPiece: PieceAttributes | null;
-  selectedPiece: PieceAttributes | null;
   currentPlayer: Player;
   gamePhase: GamePhase;
   gameState: GameState;
@@ -25,3 +24,4 @@ export interface QuartoGame {
 }
 
 export type AIResetRef = MutableRefObject<(() => void) | null>;
+export type EnableAILoggingRef = MutableRefObject<boolean>;

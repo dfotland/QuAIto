@@ -8,14 +8,15 @@ import AboutModal from './components/modals/AboutModal';
 import AIConfigModal from './components/modals/AIConfigModal';
 import RulesModal from './components/modals/RulesModal';
 import { useAIController } from './hooks/useAIController';
-import type { AIResetRef } from './hooks/quartoGameTypes';
+import type { AIResetRef, EnableAILoggingRef } from './hooks/quartoGameTypes';
 import { useQuartoGame } from './hooks/useQuartoGame';
 import './App.css';
 
 function App() {
   const aiResetRef = useRef<(() => void) | null>(null) as AIResetRef;
-  const game = useQuartoGame(aiResetRef);
-  const ai = useAIController(game, aiResetRef);
+  const enableAILoggingRef = useRef(false) as EnableAILoggingRef;
+  const game = useQuartoGame(aiResetRef, enableAILoggingRef);
+  const ai = useAIController(game, aiResetRef, enableAILoggingRef);
 
   const [showAIConfig, setShowAIConfig] = useState(false);
   const [showRules, setShowRules] = useState(false);
@@ -50,7 +51,6 @@ function App() {
           <h3>Available Pieces ({game.availablePieces.length}/{TOTAL_PIECES})</h3>
           <PieceSet
             availablePieces={game.availablePieces}
-            selectedPiece={game.selectedPiece}
             onPieceSelect={game.handlePieceSelect}
             gamePhase={game.gamePhase}
             gameOver={game.gameState !== 'playing'}

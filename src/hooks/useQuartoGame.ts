@@ -10,13 +10,13 @@ import {
   getWinningLine,
   isBoardFull,
 } from '../utils/gameUtils';
-import type { AIResetRef, QuartoGame } from './quartoGameTypes';
+import { debugLog } from '../utils/logger';
+import type { AIResetRef, EnableAILoggingRef, QuartoGame } from './quartoGameTypes';
 
-export function useQuartoGame(aiResetRef: AIResetRef): QuartoGame {
+export function useQuartoGame(aiResetRef: AIResetRef, enableAILoggingRef: EnableAILoggingRef): QuartoGame {
   const [board, setBoard] = useState(createEmptyBoard);
   const [availablePieces, setAvailablePieces] = useState<PieceAttributes[]>(generateAllPieces);
   const [stagedPiece, setStagedPiece] = useState<PieceAttributes | null>(null);
-  const [selectedPiece, setSelectedPiece] = useState<PieceAttributes | null>(null);
   const [currentPlayer, setCurrentPlayer] = useState<Player>(INITIAL_PLAYER);
   const [gamePhase, setGamePhase] = useState<GamePhase>('give');
   const [gameState, setGameState] = useState<GameState>('playing');
@@ -36,18 +36,23 @@ export function useQuartoGame(aiResetRef: AIResetRef): QuartoGame {
 
   const handlePieceSelect = (piece: PieceAttributes) => {
     if (gamePhase === 'give' && gameState === 'playing') {
-      console.log(`handlePieceSelect: Player ${currentPlayer} selecting piece for Player ${getOpponent(currentPlayer)}`);
+      debugLog(
+        enableAILoggingRef.current,
+        `handlePieceSelect: Player ${currentPlayer} selecting piece for Player ${getOpponent(currentPlayer)}`
+      );
 
       setStagedPiece(piece);
-      console.log(`Staged piece set:`, piece);
+      debugLog(enableAILoggingRef.current, `Staged piece set:`, piece);
 
       setAvailablePieces(prev => prev.filter(p => !arePiecesEqual(p, piece)));
 
-      setSelectedPiece(null);
       setCurrentPlayer(prev => getOpponent(prev));
       setGamePhase('place');
 
-      console.log(`Turn switched to Player ${getOpponent(currentPlayer)}, phase: place`);
+      debugLog(
+        enableAILoggingRef.current,
+        `Turn switched to Player ${getOpponent(currentPlayer)}, phase: place`
+      );
     }
   };
 
@@ -63,22 +68,21 @@ export function useQuartoGame(aiResetRef: AIResetRef): QuartoGame {
       setStagedPiece(null);
       setGamePhase('give');
 
-      console.log(`Player ${currentPlayer} placed piece at row ${row}, column ${col}`);
+      debugLog(enableAILoggingRef.current, `Player ${currentPlayer} placed piece at row ${row}, column ${col}`);
     } else if (board[row][col]) {
-      console.log(`Cell at row ${row}, column ${col} is already occupied`);
+      debugLog(enableAILoggingRef.current, `Cell at row ${row}, column ${col} is already occupied`);
     } else if (gamePhase === 'give') {
-      console.log(`Player ${currentPlayer} must first select a piece for the opponent`);
+      debugLog(enableAILoggingRef.current, `Player ${currentPlayer} must first select a piece for the opponent`);
     } else if (gameState !== 'playing') {
-      console.log(`Game is over`);
+      debugLog(enableAILoggingRef.current, `Game is over`);
     } else {
-      console.log(`No piece available to place`);
+      debugLog(enableAILoggingRef.current, `No piece available to place`);
     }
   };
 
   const startNewGame = () => {
     setBoard(createEmptyBoard());
     setAvailablePieces(generateAllPieces());
-    setSelectedPiece(null);
     setStagedPiece(null);
     setCurrentPlayer(INITIAL_PLAYER);
     setGamePhase('give');
@@ -107,7 +111,6 @@ export function useQuartoGame(aiResetRef: AIResetRef): QuartoGame {
     board,
     availablePieces,
     stagedPiece,
-    selectedPiece,
     currentPlayer,
     gamePhase,
     gameState,

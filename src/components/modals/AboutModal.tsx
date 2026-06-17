@@ -6,7 +6,7 @@ interface AboutModalProps {
 
 export default function AboutModal({ onClose }: AboutModalProps) {
   return (
-    <ModalShell title="About QuAIto 0.92 Beta" onClose={onClose} modalClassName="about-modal">
+    <ModalShell title="About QuAIto 1.0" onClose={onClose} modalClassName="about-modal">
       <div className="about-section">
         <h4>About the Game</h4>
         <p>Quarto is a strategic board game invented by Blaise Müller in 1991. It's a game of logic and pattern recognition where players must think ahead to avoid giving their opponent a winning piece.</p>

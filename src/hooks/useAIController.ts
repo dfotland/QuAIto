@@ -3,7 +3,8 @@ import { AI_THINKING_DELAY_MS } from '../constants/game';
 import { makeAIMove, type AIInput } from '../ai';
 import type { AIDifficulty, PieceAttributes } from '../types/game';
 import { arePiecesEqual, formatPieceForLogging, getOpponent } from '../utils/gameUtils';
-import type { AIResetRef, QuartoGame } from './quartoGameTypes';
+import { debugLog } from '../utils/logger';
+import type { AIResetRef, EnableAILoggingRef, QuartoGame } from './quartoGameTypes';
 
 export interface AIController {
   player1AI: boolean;
@@ -21,7 +22,11 @@ interface AIMovePayload {
   pieceToGive?: PieceAttributes | null;
 }
 
-export function useAIController(game: QuartoGame, aiResetRef: AIResetRef): AIController {
+export function useAIController(
+  game: QuartoGame,
+  aiResetRef: AIResetRef,
+  enableAILoggingRef: EnableAILoggingRef
+): AIController {
   const {
     board,
     stagedPiece,
@@ -48,7 +53,6 @@ export function useAIController(game: QuartoGame, aiResetRef: AIResetRef): AICon
   const scheduleGenerationRef = useRef(0);
   const effectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const part2TimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const enableAILoggingRef = useRef(enableAILogging);
   const basicAIDifficultyRef = useRef(basicAIDifficulty);
   const executeAIMoveRef = useRef<() => void>(() => {});
 
@@ -87,19 +91,19 @@ export function useAIController(game: QuartoGame, aiResetRef: AIResetRef): AICon
 
   const applyAIMovePart2 = useCallback(
     (pieceToGive: PieceAttributes) => {
-      console.log(`🎁 STEP 2 - AI Player ${currentPlayer} giving piece to Player ${getOpponent(currentPlayer)}`);
-      console.log(`🔍 PIECE DETAILS - Given piece: ${formatPieceForLogging(pieceToGive)} (height:${pieceToGive.height}, color:${pieceToGive.color}, shape:${pieceToGive.shape}, top:${pieceToGive.top})`);
-      console.log(`🔍 This piece will be staged for Player ${getOpponent(currentPlayer)} to place`);
+      debugLog(enableAILoggingRef.current, `🎁 STEP 2 - AI Player ${currentPlayer} giving piece to Player ${getOpponent(currentPlayer)}`);
+      debugLog(enableAILoggingRef.current, `🔍 PIECE DETAILS - Given piece: ${formatPieceForLogging(pieceToGive)} (height:${pieceToGive.height}, color:${pieceToGive.color}, shape:${pieceToGive.shape}, top:${pieceToGive.top})`);
+      debugLog(enableAILoggingRef.current, `🔍 This piece will be staged for Player ${getOpponent(currentPlayer)} to place`);
 
       setStagedPiece(pieceToGive);
-      console.log(`✅ NEW STAGED PIECE SET: ${formatPieceForLogging(pieceToGive)}`);
+      debugLog(enableAILoggingRef.current, `✅ NEW STAGED PIECE SET: ${formatPieceForLogging(pieceToGive)}`);
 
       setAvailablePieces(prev => prev.filter(p => !arePiecesEqual(p, pieceToGive)));
       setCurrentPlayer(prev => getOpponent(prev));
       setGamePhase('place');
 
-      console.log(`✅ STEP 2 COMPLETE - Piece given, switched to Player ${getOpponent(currentPlayer)} in place phase`);
-      console.log(`🎯 ======= AI COMPLETE MOVE FINISHED =======\n`);
+      debugLog(enableAILoggingRef.current, `✅ STEP 2 COMPLETE - Piece given, switched to Player ${getOpponent(currentPlayer)} in place phase`);
+      debugLog(enableAILoggingRef.current, `🎯 ======= AI COMPLETE MOVE FINISHED =======\n`);
 
       completeAIMove();
     },
@@ -125,7 +129,7 @@ export function useAIController(game: QuartoGame, aiResetRef: AIResetRef): AICon
 
   const applyAIMove = useCallback(
     (aiMove: AIMovePayload) => {
-      console.log(`🔧 Applying AI complete move:`, {
+      debugLog(enableAILoggingRef.current, `🔧 Applying AI complete move:`, {
         placement: aiMove.placement,
         pieceToGive: aiMove.pieceToGive,
         currentGamePhase: gamePhase,
@@ -133,9 +137,9 @@ export function useAIController(game: QuartoGame, aiResetRef: AIResetRef): AICon
       });
 
       if (aiMove.placement && stagedPiece) {
-        console.log(`📍 STEP 1 - Placing piece at (${aiMove.placement.row}, ${aiMove.placement.col})`);
-        console.log(`🔍 PIECE DETAILS - Staged piece being placed: ${formatPieceForLogging(stagedPiece)} (height:${stagedPiece.height}, color:${stagedPiece.color}, shape:${stagedPiece.shape}, top:${stagedPiece.top})`);
-        console.log(`🔍 Current player placing: Player ${currentPlayer}`);
+        debugLog(enableAILoggingRef.current, `📍 STEP 1 - Placing piece at (${aiMove.placement.row}, ${aiMove.placement.col})`);
+        debugLog(enableAILoggingRef.current, `🔍 PIECE DETAILS - Staged piece being placed: ${formatPieceForLogging(stagedPiece)} (height:${stagedPiece.height}, color:${stagedPiece.color}, shape:${stagedPiece.shape}, top:${stagedPiece.top})`);
+        debugLog(enableAILoggingRef.current, `🔍 Current player placing: Player ${currentPlayer}`);
 
         const piecePlaced = stagedPiece;
         setBoard(prev => {
@@ -146,7 +150,7 @@ export function useAIController(game: QuartoGame, aiResetRef: AIResetRef): AICon
         setLastMove([aiMove.placement.row, aiMove.placement.col]);
         setStagedPiece(null);
 
-        console.log(`✅ STEP 1 COMPLETE - Piece placed, staged piece cleared`);
+        debugLog(enableAILoggingRef.current, `✅ STEP 1 COMPLETE - Piece placed, staged piece cleared`);
 
         if (aiMove.pieceToGive) {
           schedulePart2(aiMove.pieceToGive);
@@ -154,14 +158,14 @@ export function useAIController(game: QuartoGame, aiResetRef: AIResetRef): AICon
         }
 
         completeAIMove();
-        console.log(`🎯 ======= AI COMPLETE MOVE FINISHED =======\n`);
+        debugLog(enableAILoggingRef.current, `🎯 ======= AI COMPLETE MOVE FINISHED =======\n`);
         return;
       }
 
       if (aiMove.placement && !stagedPiece) {
-        console.log(`❌ STEP 1 FAILED - Cannot place piece, no staged piece available`);
+        debugLog(enableAILoggingRef.current, `❌ STEP 1 FAILED - Cannot place piece, no staged piece available`);
       } else if (!aiMove.placement && stagedPiece) {
-        console.log(`🔄 STEP 1 SKIPPED - No placement specified (first move of game)`);
+        debugLog(enableAILoggingRef.current, `🔄 STEP 1 SKIPPED - No placement specified (first move of game)`);
       }
 
       if (aiMove.pieceToGive) {
@@ -170,7 +174,7 @@ export function useAIController(game: QuartoGame, aiResetRef: AIResetRef): AICon
       }
 
       completeAIMove();
-      console.log(`🎯 ======= AI COMPLETE MOVE FINISHED =======\n`);
+      debugLog(enableAILoggingRef.current, `🎯 ======= AI COMPLETE MOVE FINISHED =======\n`);
     },
     [
       stagedPiece,
@@ -187,7 +191,7 @@ export function useAIController(game: QuartoGame, aiResetRef: AIResetRef): AICon
 
   const executeBasicAIMove = useCallback(() => {
     executionCountRef.current += 1;
-    console.log(`🤖 Basic AI (Player ${currentPlayer}) is thinking... [Execution #${executionCountRef.current}]`);
+    debugLog(enableAILoggingRef.current, `🤖 Basic AI (Player ${currentPlayer}) is thinking... [Execution #${executionCountRef.current}]`);
 
     const aiInput: AIInput = {
       currentPlayer,
@@ -200,15 +204,10 @@ export function useAIController(game: QuartoGame, aiResetRef: AIResetRef): AICon
     };
 
     const aiMove = makeAIMove(aiInput);
-    console.log(`🎯 Basic AI move completed [Execution #${executionCountRef.current}]`);
+    debugLog(enableAILoggingRef.current, `🎯 Basic AI move completed [Execution #${executionCountRef.current}]`);
 
-    const formatPieceForDisplay = (piece: PieceAttributes | null) => {
-      if (!piece) return 'null';
-      return formatPieceForLogging(piece);
-    };
-
-    console.log(`🔍 AI RETURNED - Placement: ${aiMove.placement ? `(${aiMove.placement.row}, ${aiMove.placement.col})` : 'null'} - Piece to place: ${formatPieceForDisplay(stagedPiece)} ${stagedPiece ? `(height:${stagedPiece.height}, color:${stagedPiece.color}, shape:${stagedPiece.shape}, top:${stagedPiece.top})` : ''}`);
-    console.log(`🔍 AI RETURNED - PieceToGive: ${formatPieceForDisplay(aiMove.pieceToGive)} ${aiMove.pieceToGive ? `(height:${aiMove.pieceToGive.height}, color:${aiMove.pieceToGive.color}, shape:${aiMove.pieceToGive.shape}, top:${aiMove.pieceToGive.top})` : ''}`);
+    debugLog(enableAILoggingRef.current, `🔍 AI RETURNED - Placement: ${aiMove.placement ? `(${aiMove.placement.row}, ${aiMove.placement.col})` : 'null'} - Piece to place: ${stagedPiece ? formatPieceForLogging(stagedPiece) : 'null'} ${stagedPiece ? `(height:${stagedPiece.height}, color:${stagedPiece.color}, shape:${stagedPiece.shape}, top:${stagedPiece.top})` : ''}`);
+    debugLog(enableAILoggingRef.current, `🔍 AI RETURNED - PieceToGive: ${aiMove.pieceToGive ? formatPieceForLogging(aiMove.pieceToGive) : 'null'} ${aiMove.pieceToGive ? `(height:${aiMove.pieceToGive.height}, color:${aiMove.pieceToGive.color}, shape:${aiMove.pieceToGive.shape}, top:${aiMove.pieceToGive.top})` : ''}`);
 
     return {
       placement: aiMove.placement,
@@ -228,15 +227,10 @@ export function useAIController(game: QuartoGame, aiResetRef: AIResetRef): AICon
       return;
     }
 
-    const formatPieceForDisplay = (piece: PieceAttributes | null) => {
-      if (!piece) return 'null';
-      return formatPieceForLogging(piece);
-    };
-
-    console.log(`🎯 ======= AI MOVE START =======`);
-    console.log(`🎯 AI (Player ${currentPlayer}) executing move in phase: ${gamePhase}`);
-    console.log(`🎯 Staged piece available: ${formatPieceForDisplay(stagedPiece)} ${stagedPiece ? `(height:${stagedPiece.height}, color:${stagedPiece.color}, shape:${stagedPiece.shape}, top:${stagedPiece.top})` : ''}`);
-    console.log(`🎯 Available pieces count: ${availablePieces.length}`);
+    debugLog(enableAILoggingRef.current, `🎯 ======= AI MOVE START =======`);
+    debugLog(enableAILoggingRef.current, `🎯 AI (Player ${currentPlayer}) executing move in phase: ${gamePhase}`);
+    debugLog(enableAILoggingRef.current, `🎯 Staged piece available: ${stagedPiece ? formatPieceForLogging(stagedPiece) : 'null'} ${stagedPiece ? `(height:${stagedPiece.height}, color:${stagedPiece.color}, shape:${stagedPiece.shape}, top:${stagedPiece.top})` : ''}`);
+    debugLog(enableAILoggingRef.current, `🎯 Available pieces count: ${availablePieces.length}`);
 
     const aiMove = executeBasicAIMove();
 
@@ -268,7 +262,7 @@ export function useAIController(game: QuartoGame, aiResetRef: AIResetRef): AICon
     }
 
     if (pendingExecutionRef.current || aiMoveInProgressRef.current) {
-      console.log('🚫 AI execution already pending or in progress, skipping...');
+      debugLog(enableAILoggingRef.current, '🚫 AI execution already pending or in progress, skipping...');
       return;
     }
 
