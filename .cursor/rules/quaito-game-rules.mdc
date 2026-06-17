@@ -1,0 +1,30 @@
+---
+description: "QuAIto Quarto domain rules — pieces, phases, win conditions"
+globs: ["src/**/*.{ts,tsx}"]
+alwaysApply: false
+---
+
+# Quarto domain model
+
+## Board and pieces
+- 4×4 board; 16 unique pieces, all start off-board.
+- Each piece has four binary attributes (see `PieceAttributes` in `src/components/Piece.tsx`):
+  - **height**: `tall` | `short`
+  - **color**: `light` | `dark`
+  - **shape**: `round` | `square`
+  - **top**: `smooth` | `split`
+
+## Turn structure
+Each turn has two phases (`GamePhase` in `App.tsx`):
+1. **place** — place the piece your opponent selected for you (you cannot choose which piece to place).
+2. **give** — select a piece from the available pool for your opponent to place next.
+
+## Winning
+- A player wins by placing a piece that completes a line of four (horizontal, vertical, or diagonal) sharing **at least one** attribute.
+- Win detection: `checkWinCondition()` and `getWinningLine()` in `src/utils/gameUtils.ts`.
+- Game ends on a win or when all 16 pieces are placed (tie via `isBoardFull()`).
+
+## Invariants when editing logic
+- Do not allow a player to pick their own piece to place; only the opponent's **give** choice determines placement.
+- Piece equality uses `arePiecesEqual()` — do not compare object references.
+- Keep attribute string values aligned with CSS classes (`piece-tall`, `piece-round`, etc.).

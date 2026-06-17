@@ -1,0 +1,3 @@
+[submodule "shared/common-spa"]
+	path = shared/common-spa
+	url = git@github.com:dfotland/common-SPA.git

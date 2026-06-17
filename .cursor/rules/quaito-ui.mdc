@@ -1,0 +1,36 @@
+---
+description: "QuAIto UI — CSS Grid layout, piece styling, responsive scaling"
+globs: ["src/**/*.{tsx,css}"]
+alwaysApply: false
+---
+
+# UI and styling
+
+## Approach
+- Plain CSS per component (`App.css`, `GameBoard.css`, `Piece.css`, etc.) — no Tailwind.
+- Skeuomorphic piece rendering uses 2D gradients, inset shadows, and `::before`/`::after` — not CSS 3D transforms.
+- Do not migrate piece styles to utility classes without a deliberate refactor.
+
+## Responsive scaling
+- All sizing derives from `--piece-base-size` in `App.css` `:root`.
+- Use `calc(var(--piece-base-size) * …)` for spacing, fonts, and borders — avoid hard-coded pixel sizes.
+- Portrait orientation overrides `--piece-base-size` via `@media (orientation: portrait)`.
+
+## Layout
+- Main shell: `.game-grid` CSS Grid in `App.css` (header, board, pieces, controls areas).
+- Board: `.board-grid` 4×4 grid in `GameBoard.css` with `container-type: size`.
+- Piece pool: `PieceSet.css`; controls and modals in `ControlPanel.css` / `App.css`.
+
+## Piece component
+- `Piece.tsx` builds class names: `piece-{height}`, `piece-{color}`, `piece-{shape}`, `piece-{top}`.
+- Visual rules live in `Piece.css` — keep TSX free of inline styling.
+- States: `.piece-clickable`, `.piece-selected`; animations: `pieceEntry`, `winningPulse`.
+
+## UX patterns
+- Winning cells: `.winning-cell` with pulse animation.
+- Last move: `.last-move-cell` border highlight.
+- Modals for help, rules, and AI settings — extend existing modal patterns in `App.tsx` / `App.css`.
+
+## Accessibility
+- Interactive pieces use `role="button"` and `tabIndex` when clickable.
+- Preserve keyboard and screen-reader support when changing controls or modals.

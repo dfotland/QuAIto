@@ -1,0 +1,40 @@
+---
+description: "QuAIto AI — heuristic engine, difficulty tiers, MCTS module"
+globs: ["src/ai/**/*.ts", "src/ai.ts"]
+alwaysApply: false
+---
+
+# AI system
+
+## Entry point
+- `makeAIMove()` in `src/ai.ts` is the primary AI used by `App.tsx`.
+- It calls `makeAIPlacement()` then `makeAIPieceSelection()` separately for place and give phases.
+
+## Heuristic AI (`src/ai.ts`)
+Difficulty levels: `easy` | `normal` | `hard` | `brutal`.
+
+| Level | Random move chance | Win-check skip chance | Min safe pieces |
+|-------|-------------------|----------------------|-----------------|
+| easy | 40% | 50% | 2 |
+| normal | 20% | 20% | 2 |
+| hard | 10% | 5% | 3 |
+| brutal | 0% | 0% | 8 |
+
+Constants are at the top of `ai.ts`. Logic priorities:
+1. Take immediate wins when not skipped by difficulty.
+2. Block opponent wins.
+3. Prefer placements/pieces that leave enough safe options (min safe pieces threshold).
+4. Fall back to random moves per difficulty.
+
+Enable `enableLogging` on `AIInput` for console decision traces.
+
+## MCTS module (`src/ai/mcts.ts`, `src/ai/mctsPlayer.ts`)
+- Separate Monte Carlo Tree Search implementation with configurable iterations and playout depth.
+- `MCTSAIPlayer.getBestMove()` wraps the search engine.
+- Not wired as the default in `makeAIMove()` — extend or swap callers in `App.tsx` to use MCTS.
+- Preserve separation: keep MCTS state/search in `ai/mcts.ts`, keep app-facing API thin in `mctsPlayer.ts`.
+
+## When changing AI
+- Tune constants in `ai.ts` rather than hard-coding magic numbers in functions.
+- Test all four difficulty levels and both phases (place and give).
+- Winning placement ends the turn early — no piece is given after a win.

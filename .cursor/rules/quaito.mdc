@@ -1,0 +1,28 @@
+---
+description: "QuAIto app overview — stack, file map, game modes, edit scope"
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# QuAIto
+
+Digital Quarto board game built with React 19, TypeScript, and Vite.
+
+## Stack overrides
+- Single-view game; React Router is not used.
+- Styling uses plain CSS files (`*.css`) with custom properties, not Tailwind.
+- Import shared utilities from `@smart-games/common-spa` instead of duplicating them.
+
+## File map
+- `src/App.tsx` — game state, turn flow, AI orchestration, modals
+- `src/utils/gameUtils.ts` — board helpers, win detection, piece generation
+- `src/components/` — `GameBoard`, `Piece`, `PieceSet`, `ControlPanel`
+- `src/ai.ts` — heuristic AI (`makeAIMove`, placement and piece-selection logic)
+- `src/ai/mcts.ts`, `src/ai/mctsPlayer.ts` — MCTS search engine (optional AI path)
+
+## Game modes
+- Human vs Human, Human vs AI, AI vs AI (configured in `App.tsx` / control panel)
+
+## Scope
+- Only modify files under this app (`QuAIto/`).
+- See also: `quaito-game-rules.mdc`, `quaito-ai.mdc`, `quaito-ui.mdc`.
