@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AI_THINKING_DELAY_MS } from '../constants/game';
 import { makeAIMove, type AIInput } from '../ai';
+import { enrichMctsMoveWithGiveFallback } from '../mcts/enrich-mcts-move';
 import { atomicMovesToAIMove, sanitizeMctsAIMoveForPhase } from '../mcts/parse-move';
 import { formatMctsCoordinatorResult } from '../mcts/log-mcts-result';
 import { getQuartoMctsCoordinator, stopQuartoMctsSearch } from '../mcts/coordinator-service';
@@ -53,9 +54,10 @@ export function useAIController(
     setLastMove,
   } = game;
 
-  const [player1AI, setPlayer1AI] = useState(true);
-  const [player2AI, setPlayer2AI] = useState(false);
-  const [basicAIDifficulty, setBasicAIDifficulty] = useState<AIDifficulty>('easy');
+  const [player1AI, setPlayer1AIState] = useState(true);
+  const [player2AI, setPlayer2AIState] = useState(false);
+  const [basicAIDifficulty, setBasicAIDifficultyState] = useState<AIDifficulty>('easy');
+  const [scheduleNonce, setScheduleNonce] = useState(0);
   const [enableAILogging, setEnableAILoggingState] = useState(false);
   const [enableAIProfiling, setEnableAIProfiling] = useState(false);
   const [isAIThinking, setAIThinkingState] = useState(false);
@@ -77,9 +79,12 @@ export function useAIController(
   const executeAIMoveRef = useRef<() => Promise<void>>(async () => {});
   const enableAIProfilingRef = useRef(false);
   const mctsSearchSeedRef = useRef(1);
+  const mctsScheduleRetryCountRef = useRef(0);
+  const MAX_MCTS_SCHEDULE_RETRIES = 3;
   const gamePhaseRef = useRef(gamePhase);
   const stagedPieceRef = useRef(stagedPiece);
   const currentPlayerRef = useRef(currentPlayer);
+  const gameStateRef = useRef(gameState);
 
   enableAILoggingRef.current = enableAILogging;
   enableAIProfilingRef.current = enableAIProfiling;
@@ -87,6 +92,7 @@ export function useAIController(
   gamePhaseRef.current = gamePhase;
   stagedPieceRef.current = stagedPiece;
   currentPlayerRef.current = currentPlayer;
+  gameStateRef.current = gameState;
 
   const setEnableAILogging = useCallback((value: boolean) => {
     setEnableAILoggingState(value);
@@ -131,11 +137,26 @@ export function useAIController(
     }
   }, []);
 
-  const completeAIMove = useCallback(() => {
-    aiMoveInProgressRef.current = false;
-    pendingExecutionRef.current = false;
-    setAIThinking(false);
-  }, [setAIThinking]);
+  const requestAISchedule = useCallback(() => {
+    setScheduleNonce((nonce) => nonce + 1);
+  }, []);
+
+  const completeAIMove = useCallback(
+    (options?: { reschedule?: boolean }) => {
+      aiMoveInProgressRef.current = false;
+      pendingExecutionRef.current = false;
+      setAIThinking(false);
+
+      if (
+        options?.reschedule &&
+        gameStateRef.current === 'playing' &&
+        shouldAIActNow()
+      ) {
+        requestAISchedule();
+      }
+    },
+    [setAIThinking, shouldAIActNow, requestAISchedule],
+  );
 
   const resetAIExecutionRefs = useCallback(() => {
     stopQuartoMctsSearch();
@@ -143,12 +164,37 @@ export function useAIController(
     clearEffectTimer();
     clearPart2Timer();
     executionCountRef.current = 0;
+    mctsScheduleRetryCountRef.current = 0;
     aiMoveInProgressRef.current = false;
     pendingExecutionRef.current = false;
     setAIThinking(false);
   }, [clearEffectTimer, clearPart2Timer, setAIThinking]);
 
   aiResetRef.current = resetAIExecutionRefs;
+
+  const setPlayer1AI = useCallback(
+    (value: boolean) => {
+      resetAIExecutionRefs();
+      setPlayer1AIState(value);
+    },
+    [resetAIExecutionRefs],
+  );
+
+  const setPlayer2AI = useCallback(
+    (value: boolean) => {
+      resetAIExecutionRefs();
+      setPlayer2AIState(value);
+    },
+    [resetAIExecutionRefs],
+  );
+
+  const setBasicAIDifficulty = useCallback(
+    (value: AIDifficulty) => {
+      resetAIExecutionRefs();
+      setBasicAIDifficultyState(value);
+    },
+    [resetAIExecutionRefs],
+  );
 
   const applyAIMovePart2 = useCallback(
     (pieceToGive: PieceAttributes) => {
@@ -253,6 +299,20 @@ export function useAIController(
       completeAIMove,
     ]
   );
+
+  const executeHeuristicFallbackMove = useCallback((): AIMovePayload => {
+    const aiInput: AIInput = {
+      currentPlayer: currentPlayerRef.current,
+      gamePhase: gamePhaseRef.current,
+      board,
+      pieceToPlace: stagedPieceRef.current,
+      availablePieces,
+      enableLogging: enableAILoggingRef.current,
+      difficulty: 'hard',
+    };
+    const move = makeAIMove(aiInput);
+    return { placement: move.placement, pieceToGive: move.pieceToGive };
+  }, [board, availablePieces]);
 
   const executeBasicAIMove = useCallback(() => {
     executionCountRef.current += 1;
@@ -360,16 +420,27 @@ export function useAIController(
     try {
       if (basicAIDifficultyRef.current === 'mcts') {
         const rawMove = await executeMctsAIMove();
-        aiMove =
+        const sanitizedMove =
           rawMove === null
             ? null
             : sanitizeMctsAIMoveForPhase(rawMove, turnPhase, turnStagedPiece !== null);
+        aiMove =
+          sanitizedMove === null
+            ? null
+            : enrichMctsMoveWithGiveFallback(sanitizedMove, {
+                turnPhase,
+                turnStagedPiece,
+                board,
+                availablePieces,
+                currentPlayer: turnPlayer,
+                enableLogging: enableAILoggingRef.current,
+              });
       } else {
         aiMove = executeBasicAIMove();
       }
     } catch (error) {
       debugLog(enableAILoggingRef.current, '❌ AI move execution failed:', error);
-      completeAIMove();
+      completeAIMove({ reschedule: shouldAIActNow() });
       return;
     }
 
@@ -385,9 +456,25 @@ export function useAIController(
     }
 
     if (aiMove) {
+      mctsScheduleRetryCountRef.current = 0;
       applyAIMove(aiMove);
+    } else if (
+      basicAIDifficultyRef.current === 'mcts' &&
+      mctsScheduleRetryCountRef.current < MAX_MCTS_SCHEDULE_RETRIES
+    ) {
+      mctsScheduleRetryCountRef.current += 1;
+      debugLog(
+        enableAILoggingRef.current,
+        `⚠️ AI returned no applicable move — re-scheduling turn (attempt ${mctsScheduleRetryCountRef.current}/${MAX_MCTS_SCHEDULE_RETRIES})`,
+      );
+      completeAIMove({ reschedule: true });
+    } else if (basicAIDifficultyRef.current === 'mcts') {
+      debugLog(enableAILoggingRef.current, '⚠️ MCTS failed repeatedly — using heuristic fallback');
+      mctsScheduleRetryCountRef.current = 0;
+      applyAIMove(executeHeuristicFallbackMove());
     } else {
-      completeAIMove();
+      debugLog(enableAILoggingRef.current, '⚠️ AI returned no applicable move — re-scheduling turn');
+      completeAIMove({ reschedule: true });
     }
   }, [
     gameState,
@@ -395,6 +482,7 @@ export function useAIController(
     shouldAIActNow,
     isAIPlayer,
     executeBasicAIMove,
+    executeHeuristicFallbackMove,
     executeMctsAIMove,
     applyAIMove,
     completeAIMove,
@@ -437,12 +525,25 @@ export function useAIController(
     return () => {
       clearEffectTimer();
       if (!aiMoveInProgressRef.current && part2TimerRef.current === null) {
+        stopQuartoMctsSearch();
         scheduleGenerationRef.current += 1;
         pendingExecutionRef.current = false;
         setAIThinking(false);
       }
     };
-  }, [currentPlayer, gamePhase, gameState, stagedPiece, player1AI, player2AI, basicAIDifficulty, clearEffectTimer, shouldAIActNow]);
+  }, [
+    currentPlayer,
+    gamePhase,
+    gameState,
+    stagedPiece,
+    player1AI,
+    player2AI,
+    basicAIDifficulty,
+    scheduleNonce,
+    clearEffectTimer,
+    shouldAIActNow,
+    setAIThinking,
+  ]);
 
   return {
     player1AI,
