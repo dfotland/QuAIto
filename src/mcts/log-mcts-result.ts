@@ -30,6 +30,11 @@ export function formatMctsAtomicMoveStats(move: AtomicMoveResult, plyIndex: numb
 export function formatMctsCoordinatorResult(result: CoordinatorMoveResult): string[] {
   const lines = result.moves.flatMap((move, index) => formatMctsAtomicMoveStats(move, index));
 
+  const iterPerSec =
+    result.totalElapsedMs > 0
+      ? Math.round(result.totalIterations / (result.totalElapsedMs / 1000))
+      : 'n/a';
+
   lines.push(
     [
       'totals',
@@ -38,6 +43,7 @@ export function formatMctsCoordinatorResult(result: CoordinatorMoveResult): stri
       `nodes=${result.totalNodesExpanded}`,
       `maxDepth=${result.maxSearchDepth}`,
       `elapsed=${result.totalElapsedMs.toFixed(0)}ms`,
+      `iterPerSec=${iterPerSec}`,
       result.interrupted ? 'interrupted' : 'complete',
     ].join(', '),
   );
