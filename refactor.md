@@ -10,7 +10,7 @@ Refactor QuAIto for maintainability and regression safety without changing game 
 - Smaller, focused modules with shared types/constants
 - Remove dead code that adds noise but does nothing
 - Vitest tests lock in behavior before and during structural moves
-- **Out of scope:** [`src/ai/mcts.ts`](src/ai/mcts.ts), [`src/ai/mctsPlayer.ts`](src/ai/mctsPlayer.ts)
+- **Out of scope:** legacy local MCTS (removed; use `@smart-games/mcts` via `src/mcts/`)
 
 ## Task Checklist
 
@@ -303,4 +303,4 @@ Work in this sequence so tests guard each step:
 | New | `types/game.ts`, `constants/game.ts`, `utils/logger.ts`, `hooks/useQuartoGame.ts`, `hooks/useAIController.ts`, `components/modals/*`, `*.test.ts`, `vitest.config.ts` |
 | Refactor | `App.tsx`, `ai.ts`, `gameUtils.ts`, `Piece.tsx`, `PieceSet.tsx`, `GameBoard.tsx`, `ControlPanel.tsx` |
 | Cleanup only | `App.css` (remove `.mcts-config`) |
-| Untouched | `mcts.ts`, `mctsPlayer.ts`, all MCTS imports/logic |
+| Untouched | `@smart-games/mcts` package; `src/mcts/` integration wiring |

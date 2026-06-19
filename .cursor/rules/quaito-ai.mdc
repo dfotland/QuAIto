@@ -1,6 +1,6 @@
 ---
 description: "QuAIto AI — heuristic engine, difficulty tiers, MCTS integration"
-globs: ["src/ai/**/*.ts", "src/ai.ts", "src/hooks/useAIController.ts", "src/components/modals/AIConfigModal.tsx"]
+globs: ["src/ai.ts", "src/hooks/useAIController.ts", "src/mcts/**/*.ts", "src/components/modals/AIConfigModal.tsx"]
 alwaysApply: false
 ---
 
@@ -41,9 +41,8 @@ Enable `enableLogging` on `AIInput` for console decision traces.
 - Worker bootstrap: `src/mcts/worker-entry.ts` imports `@smart-games/mcts/worker-host` and registers Quarto only.
 - Map QuAIto player `1 | 2` ↔ MCTS `PlayerId` `0 | 1` in `serializeQuartoGameState()` only.
 - On new game or AI toggle mid-think: `stopQuartoMctsSearch()`.
-
-### Legacy local MCTS (`src/ai/mcts.ts`, `src/ai/mctsPlayer.ts`)
-- Superseded by `@smart-games/mcts` — safe to delete once verified; do not wire back into `useAIController`.
+- Set `logPrincipalVariation: true` only when AI debug logging is enabled (`QuartoSearchParameters.forMcts`).
+- Set `profileSearch: true` only when **both** AI logging and **Enable AI Profiling** are checked in AI Configuration.
 
 ## When changing AI
 - Tune heuristic constants in `ai.ts` — not inline magic numbers.

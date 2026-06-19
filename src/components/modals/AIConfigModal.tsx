@@ -12,6 +12,8 @@ interface AIConfigModalProps {
   setBasicAIDifficulty: (value: AIDifficulty) => void;
   enableAILogging: boolean;
   setEnableAILogging: (value: boolean) => void;
+  enableAIProfiling: boolean;
+  setEnableAIProfiling: (value: boolean) => void;
 }
 
 export default function AIConfigModal({
@@ -24,6 +26,8 @@ export default function AIConfigModal({
   setBasicAIDifficulty,
   enableAILogging,
   setEnableAILogging,
+  enableAIProfiling,
+  setEnableAIProfiling,
 }: AIConfigModalProps) {
   return (
     <ModalShell title="AI Configuration" onClose={onClose} modalClassName="ai-config-modal">
@@ -77,6 +81,18 @@ export default function AIConfigModal({
             onChange={(e) => setEnableAILogging(e.target.checked)}
           />
           Enable AI Logging (check console)
+        </label>
+      </div>
+
+      <div className="config-group">
+        <label>
+          <input
+            type="checkbox"
+            checked={enableAIProfiling}
+            disabled={!enableAILogging}
+            onChange={(e) => setEnableAIProfiling(e.target.checked)}
+          />
+          Enable AI Profiling (requires logging)
         </label>
       </div>
     </ModalShell>

@@ -133,9 +133,8 @@ src/
 │   ├── GameBoard.tsx   # Main game board
 │   ├── Piece.tsx       # Individual game pieces
 │   └── PieceSet.tsx    # Available pieces grid
-├── ai/                 # AI implementation
-│   ├── ai.ts          # Main AI logic
-│   └── mcts.ts        # Monte Carlo Tree Search (future)
+├── ai.ts               # Heuristic AI (easy–brutal)
+├── mcts/               # @smart-games/mcts integration (MCTS difficulty)
 ├── utils/             # Utility functions
 │   └── gameUtils.ts   # Game logic and validation
 └── App.tsx            # Main application component

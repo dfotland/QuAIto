@@ -20,6 +20,8 @@ export interface AIController {
   setBasicAIDifficulty: (value: AIDifficulty) => void;
   enableAILogging: boolean;
   setEnableAILogging: (value: boolean) => void;
+  enableAIProfiling: boolean;
+  setEnableAIProfiling: (value: boolean) => void;
   isAIThinking: boolean;
   isAIThinkingRef: AIThinkingRef;
   /** True while AI move is scheduled, running, or awaiting part 2. */
@@ -54,7 +56,8 @@ export function useAIController(
   const [player1AI, setPlayer1AI] = useState(true);
   const [player2AI, setPlayer2AI] = useState(false);
   const [basicAIDifficulty, setBasicAIDifficulty] = useState<AIDifficulty>('easy');
-  const [enableAILogging, setEnableAILogging] = useState(false);
+  const [enableAILogging, setEnableAILoggingState] = useState(false);
+  const [enableAIProfiling, setEnableAIProfiling] = useState(false);
   const [isAIThinking, setAIThinkingState] = useState(false);
   const isAIThinkingRef = useRef(false);
   const aiTurnLockRef = useRef<() => boolean>(() => false);
@@ -72,16 +75,25 @@ export function useAIController(
   const part2TimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const basicAIDifficultyRef = useRef(basicAIDifficulty);
   const executeAIMoveRef = useRef<() => Promise<void>>(async () => {});
+  const enableAIProfilingRef = useRef(false);
   const mctsSearchSeedRef = useRef(1);
   const gamePhaseRef = useRef(gamePhase);
   const stagedPieceRef = useRef(stagedPiece);
   const currentPlayerRef = useRef(currentPlayer);
 
   enableAILoggingRef.current = enableAILogging;
+  enableAIProfilingRef.current = enableAIProfiling;
   basicAIDifficultyRef.current = basicAIDifficulty;
   gamePhaseRef.current = gamePhase;
   stagedPieceRef.current = stagedPiece;
   currentPlayerRef.current = currentPlayer;
+
+  const setEnableAILogging = useCallback((value: boolean) => {
+    setEnableAILoggingState(value);
+    if (!value) {
+      setEnableAIProfiling(false);
+    }
+  }, []);
 
   aiTurnLockRef.current = () =>
     pendingExecutionRef.current ||
@@ -287,7 +299,10 @@ export function useAIController(
           currentPlayer,
           gamePhase,
         ),
-        params: QuartoSearchParameters.forMcts(mctsSearchSeedRef.current++),
+        params: QuartoSearchParameters.forMcts(mctsSearchSeedRef.current++, {
+          logPrincipalVariation: enableAILoggingRef.current,
+          profileSearch: enableAILoggingRef.current && enableAIProfilingRef.current,
+        }),
         timeLimitMs: MCTS_TIME_LIMIT_MS,
         thinkingDelayMs: 0,
       });
@@ -438,6 +453,8 @@ export function useAIController(
     setBasicAIDifficulty,
     enableAILogging,
     setEnableAILogging,
+    enableAIProfiling,
+    setEnableAIProfiling,
     isAIThinking,
     isAIThinkingRef,
     aiTurnLockRef,

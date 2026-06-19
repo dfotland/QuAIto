@@ -18,7 +18,7 @@ Digital Quarto board game built with React 19, TypeScript, and Vite.
 - `src/utils/gameUtils.ts` — board helpers, win detection, piece generation
 - `src/components/` — `GameBoard`, `Piece`, `PieceSet`, `ControlPanel`
 - `src/ai.ts` — heuristic AI (`makeAIMove`, placement and piece-selection logic)
-- `src/ai/mcts.ts`, `src/ai/mctsPlayer.ts` — MCTS search engine (optional AI path)
+- `src/mcts/` — `@smart-games/mcts` worker entry, coordinator, state serialization
 
 ## Game modes
 - Human vs Human, Human vs AI, AI vs AI (configured in `App.tsx` / control panel)

@@ -41,8 +41,8 @@ describe('formatMctsCoordinatorResult', () => {
   });
 
   it('formats atomic move stats line', () => {
-    const line = formatMctsAtomicMoveStats(sampleResult.moves[0]!, 0);
-    expect(line).toContain('ply 1 (give)');
-    expect(line).toContain('stopped');
+    const lines = formatMctsAtomicMoveStats(sampleResult.moves[0]!, 0);
+    expect(lines[0]).toContain('ply 1 (give)');
+    expect(lines[0]).toContain('stopped');
   });
 });

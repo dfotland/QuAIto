@@ -116,6 +116,8 @@ function App() {
           setBasicAIDifficulty={ai.setBasicAIDifficulty}
           enableAILogging={ai.enableAILogging}
           setEnableAILogging={ai.setEnableAILogging}
+          enableAIProfiling={ai.enableAIProfiling}
+          setEnableAIProfiling={ai.setEnableAIProfiling}
         />
       )}
 
